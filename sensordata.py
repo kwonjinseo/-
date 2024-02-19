@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
+from collections import deque
 # import Adafruit_DHT (라즈베리 파이에서 데이터 수집할때 설치한다)
 import threading
 import time
@@ -9,6 +10,7 @@ import json
 app = Flask(__name__) # Flask 애플리케이션 생성
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db' # 데이터베이스 설정
 db = SQLAlchemy(app) # SQLAlchemy를 사용하여 데이터베이스와 연동
+sensor_data_queue = deque(maxlen=10)
 
 # 센서 데이터를 저장하기 위한 데이터베이스 모델 정의
 class SensorData(db.Model):
@@ -54,11 +56,22 @@ def get_data():
     data = SensorData.query.all() # 데이터베이스에서 모든 센서 데이터를 가져옴
     data_json = [{"temperature": d.temperature, "humidity": d.humidity} for d in data] # JSON 형식으로 변환
     
+    # 큐에 센서 데이터 추가
+    for item in data_json:
+        sensor_data_queue.append(item)
+    
      # JSON 데이터를 파일에 쓰기
     with open('sensor_data.json', 'w') as json_file:
-        json.dump(data_json, json_file, indent=4)
+        json.dump(list(sensor_data_queue), json_file, indent=4)
         
     return render_template('data.html',data=data_json)  # data.html 템플릿에 데이터 전달
+
+# JSON 파일에서 센서 데이터를 가져와 HTML로 표시하는 라우트
+@app.route('/sensor_data_html', methods=['GET'])
+def get_sensor_data_html():
+    with open('sensor_data.json', 'r') as json_file:
+        sensor_data = json.load(json_file)
+    return render_template('sensor_data.html', sensor_data=sensor_data)
 
 create_database()
 sensor_thread = threading.Thread(target=store_sensor_data)
