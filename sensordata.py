@@ -1,8 +1,10 @@
 from flask import Flask, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
+# import Adafruit_DHT (라즈베리 파이에서 데이터 수집할때 설치한다)
 import threading
 import time
 import random
+import json
 
 app = Flask(__name__) # Flask 애플리케이션 생성
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db' # 데이터베이스 설정
@@ -32,6 +34,14 @@ def store_sensor_data():
             db.session.add(new_data) # 세션에 새로운 데이터 추가
             db.session.commit() # 변경 사항을 데이터베이스에 반영
             time.sleep(1) # 1초 대기
+            #----- 실제 데이터 측정할때 사용 ----- #
+            # humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.DHT22, 4)  # DHT22 센서를 GPIO 4에 연결하여 온도와 습도 읽기
+            # if humidity is not None and temperature is not None:  # 데이터가 유효한 경우에만 저장
+            #     new_data = SensorData(temperature=temperature, humidity=humidity)  # 새로운 센서 데이터 객체 생성
+            #     db.session.add(new_data)  # 세션에 새로운 데이터 추가
+            #     db.session.commit()  # 변경 사항을 데이터베이스에 반영
+            # time.sleep(1)  # 1초 대기 
+            #----- 실제 데이터 측정할때 사용 ----- #
             
 # 홈 페이지를 렌더링하는 라우트        
 @app.route('/')
@@ -43,6 +53,11 @@ def index():
 def get_data():
     data = SensorData.query.all() # 데이터베이스에서 모든 센서 데이터를 가져옴
     data_json = [{"temperature": d.temperature, "humidity": d.humidity} for d in data] # JSON 형식으로 변환
+    
+     # JSON 데이터를 파일에 쓰기
+    with open('sensor_data.json', 'w') as json_file:
+        json.dump(data_json, json_file, indent=4)
+        
     return render_template('data.html',data=data_json)  # data.html 템플릿에 데이터 전달
 
 create_database()
