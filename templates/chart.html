@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Data Plot</title>
+    <!-- Plotly CDN을 사용하여 Plotly 라이브러리 로드 -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div id="plot"></div>
+
+    <script>
+        // Flask에서 JSON 형식으로 제공한 데이터를 가져와 그래프로 표시
+        fetch('/chart')
+            .then(response => response.json())
+            .then(data => {
+                Plotly.newPlot('plot', data.data, data.layout);
+            });
+    </script>
+</body>
+</html>
