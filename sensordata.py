@@ -41,7 +41,7 @@ def index():
 @app.route('/data', methods=['GET'])
 def get_data():
     data = SensorData.query.all()
-    data_json = [{"mode": "markers+lines","name": "Data","temperature": d.temperature, "humidity": d.humidity} for d in data]
+    data_json = [{"temperature": d.temperature, "humidity": d.humidity} for d in data]
 
     # JSON 데이터를 파일에 쓰기
     with open('sensor_data.json', 'w') as json_file:
@@ -65,7 +65,7 @@ def plot():
 
     # 그래프를 JSON 형태로 변환하여 반환
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    return graphJSON
+    return render_template('chart.html',graphJSON = graphJSON)
 
 create_database()
 sensor_thread = threading.Thread(target=store_sensor_data)

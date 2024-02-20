@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Data Plot</title>
-    <!-- Plotly CDN을 사용하여 Plotly 라이브러리 로드 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temperature and Humidity Chart</title>
+    <!-- Plotly.js -->
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
-    <div id="plot"></div>
+    <div id="chart"></div>
 
     <script>
-        // Flask에서 JSON 형식으로 제공한 데이터를 가져와 그래프로 표시
-        fetch('/chart')
-            .then(response => response.json())
-            .then(data => {
-                Plotly.newPlot('plot', data.data, data.layout);
-            });
+        // JSON 형식의 그래프 데이터 가져오기
+        var graphJSON = {{ graphJSON | safe }};
+
+        // Plotly를 사용하여 그래프 그리기
+        Plotly.newPlot('chart', graphJSON.data, graphJSON.layout);
     </script>
 </body>
 </html>
