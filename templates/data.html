@@ -1,4 +1,3 @@
-<!-- templates/data.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,21 +7,16 @@
 </head>
 <body>
     <h1>Sensor Data</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>Temperature</th>
-                <th>Humidity</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for d in data %}
-            <tr>
-                <td>{{ d.temperature }}</td>
-                <td>{{ d.humidity }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div id="sensor-data"></div>
+
+    <script>
+        // JSON 데이터 가져오기
+        var sensorData = {{ data|tojson }};
+        
+
+        // 데이터를 HTML에 삽입
+        var sensorDataElement = document.getElementById('sensor-data');
+        sensorDataElement.innerHTML = "<pre>" + JSON.stringify(sensorData, null, 4) + "</pre>";
+    </script>
 </body>
 </html>

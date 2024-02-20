@@ -7,6 +7,7 @@ import random
 import json
 import plotly.graph_objs as go
 import plotly
+import numpy as np
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db'
@@ -27,12 +28,21 @@ def create_database():
 def store_sensor_data():
     with app.app_context():
         while True:
-            temperature = round(random.uniform(20, 30), 2)
-            humidity = round(random.uniform(40, 60), 2)
-            new_data = SensorData(temperature=temperature, humidity=humidity)
-            db.session.add(new_data)
-            db.session.commit()
-            time.sleep(1)
+            # 데이터베이스에 저장된 데이터 개수 확인
+            data_count = SensorData.query.count()
+            if data_count < 100:
+                # 데이터베이스에 저장된 데이터 개수가 100개 미만이면 데이터 추가
+                temperature = np.random.uniform(20, 30,100)
+                humidity = np.random.uniform(40, 60,100)
+                temperature = np.round(temperature, 2)
+                humidity = np.round(humidity, 2)
+                new_data = SensorData(temperature=temperature, humidity=humidity)
+                db.session.add(new_data)
+                db.session.commit()
+                time.sleep(3)
+
+
+        
 
 @app.route('/')
 def index():
@@ -42,12 +52,14 @@ def index():
 def get_data():
     data = SensorData.query.all()
     data_json = [{"temperature": d.temperature, "humidity": d.humidity} for d in data]
-
     # JSON 데이터를 파일에 쓰기
     with open('sensor_data.json', 'w') as json_file:
         json.dump(data_json, json_file, indent=4)
 
-    return jsonify(data_json)
+    return render_template('data.html', data=data_json)
+    
+
+
 
 # View Chart를 위한 라우트 추가
 @app.route('/chart')
@@ -67,10 +79,12 @@ def plot():
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
     return render_template('chart.html',graphJSON = graphJSON)
 
+
 create_database()
 sensor_thread = threading.Thread(target=store_sensor_data)
 sensor_thread.daemon = True
 sensor_thread.start()
 
 if __name__ == '__main__':
+    
     app.run(debug=True)
