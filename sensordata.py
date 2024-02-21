@@ -1,13 +1,11 @@
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
-from collections import deque
 import threading
 import time
 import random
 import json
 import plotly.graph_objs as go
 import plotly
-import numpy as np
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db'
@@ -25,66 +23,69 @@ def create_database():
     with app.app_context():
         db.create_all()
 
+#json파일을 데이터베이스에 업데이트
 def store_sensor_data():
     with app.app_context():
-        while True:
-            # 데이터베이스에 저장된 데이터 개수 확인
-            data_count = SensorData.query.count()
-            if data_count < 100:
-                # 데이터베이스에 저장된 데이터 개수가 100개 미만이면 데이터 추가
-                temperature = np.random.uniform(20, 30,100)
-                humidity = np.random.uniform(40, 60,100)
-                temperature = np.round(temperature, 2)
-                humidity = np.round(humidity, 2)
-                new_data = SensorData(temperature=temperature, humidity=humidity)
-                db.session.add(new_data)
-                db.session.commit()
-                time.sleep(3)
+        # Read data from the JSON file
+        with open('sensor_data.json', 'r') as json_file:
+            data = json.load(json_file)
 
+        # Add data to the database
+        for entry in data:
+            temperature = entry.get('temperature')
+            humidity = entry.get('humidity')
+            new_data = SensorData(temperature=temperature, humidity=humidity)
+            db.session.add(new_data)
+            db.session.commit()
 
-        
-
+        # Limit the number of records to 100
+        num_records = SensorData.query.count()
+        if num_records > 100:
+            excess_records = num_records - 100
+            oldest_records = SensorData.query.order_by(SensorData.id).limit(excess_records).all()
+            for record in oldest_records:
+                db.session.delete(record)
+            db.session.commit()
+            
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/data', methods=['GET'])
-def get_data():
-    data = SensorData.query.all()
-    data_json = [{"temperature": d.temperature, "humidity": d.humidity} for d in data]
-    # JSON 데이터를 파일에 쓰기
-    with open('sensor_data.json', 'w') as json_file:
-        json.dump(data_json, json_file, indent=4)
+@app.route('/data', methods=['GET', 'POST'])
+def handle_data():
+    if request.method == 'GET':
+        data = SensorData.query.all()
+        data_json = [{"temperature": d.temperature, "humidity": d.humidity} for d in data]
+        return jsonify(data_json)
+    elif request.method == 'POST':
+        data = request.json
+        temperature = data.get('temperature')
+        humidity = data.get('humidity')
+        new_data = SensorData(temperature=temperature, humidity=humidity)
+        db.session.add(new_data)
+        db.session.commit()
+        return jsonify({"message": "Data received successfully"})
 
-    return render_template('data.html', data=data_json)
-    
-
-
-
-# View Chart를 위한 라우트 추가
+# 차트 보기용 라우트 추가
 @app.route('/chart')
 def plot():
-    with open('sensor_data.json', 'r') as json_file:
-        data_json = json.load(json_file)
-    
-    xdata_json = [d["temperature"] for d in data_json]
-    ydata_json = [d["humidity"] for d in data_json]
+    data = SensorData.query.all()
+    xdata = [d.temperature for d in data]
+    ydata = [d.humidity for d in data]
 
     # Plotly를 사용하여 그래프 생성
-    trace = go.Scatter(x=xdata_json, y=ydata_json, mode='markers+lines', name='Data')
+    trace = go.Scatter(x=xdata, y=ydata, mode='markers', name='Data')
     layout = go.Layout(title='Data Plot', xaxis=dict(title='Temperature'), yaxis=dict(title='Humidity'))
     fig = go.Figure(data=[trace], layout=layout)
 
     # 그래프를 JSON 형태로 변환하여 반환
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('chart.html',graphJSON = graphJSON)
+    return render_template('chart.html', graphJSON=graphJSON)
 
-
-create_database()
+#create_database()
 sensor_thread = threading.Thread(target=store_sensor_data)
 sensor_thread.daemon = True
 sensor_thread.start()
 
 if __name__ == '__main__':
-    
     app.run(debug=True)
