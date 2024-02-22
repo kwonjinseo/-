@@ -1,15 +1,28 @@
+# sensordata.py
+
 from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 import threading
 import time
-import random
 import json
 import plotly.graph_objs as go
 import plotly
+import mariadb
+import numpy as np
+from sklearn.neighbors import LocalOutlierFactor
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///your_database.db'
 db = SQLAlchemy(app)
+
+# MariaDB 연결 정보 입력
+db_config = {
+    'host': '192.168.1.134',
+    'port': 3306,
+    'user': 'raspi_usr',
+    'password': 'disntm',
+    'database': 'test'
+}
 
 class SensorData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -23,69 +36,50 @@ def create_database():
     with app.app_context():
         db.create_all()
 
-#json파일을 데이터베이스에 업데이트
-def store_sensor_data():
-    with app.app_context():
-        # Read data from the JSON file
-        with open('sensor_data.json', 'r') as json_file:
-            data = json.load(json_file)
+# MariaDB로부터 센서 데이터를 가져와서 데이터베이스에 업데이트 및 LOF 모델 학습
+def store_sensor_data_and_train_lof_model():
+    while True:
+        try:
+            # MariaDB 연결
+            connection = mariadb.connect(**db_config)
+            cursor = connection.cursor()
 
-        # Add data to the database
-        for entry in data:
-            temperature = entry.get('temperature')
-            humidity = entry.get('humidity')
-            new_data = SensorData(temperature=temperature, humidity=humidity)
-            db.session.add(new_data)
-            db.session.commit()
+            # 센서 데이터 가져오기
+            cursor.execute("SELECT temperature, humidity FROM test.test_data1")
+            data = cursor.fetchall()
 
-        # Limit the number of records to 100
-        num_records = SensorData.query.count()
-        if num_records > 100:
-            excess_records = num_records - 100
-            oldest_records = SensorData.query.order_by(SensorData.id).limit(excess_records).all()
-            for record in oldest_records:
-                db.session.delete(record)
-            db.session.commit()
-            
-@app.route('/')
-def index():
-    return render_template('index.html')
+            # 데이터베이스 업데이트
+            with app.app_context():
+                for entry in data:
+                    temperature, humidity = entry
+                    new_data = SensorData(temperature=temperature, humidity=humidity)
+                    db.session.add(new_data)
+                    db.session.commit()
 
-@app.route('/data', methods=['GET', 'POST'])
-def handle_data():
-    if request.method == 'GET':
-        data = SensorData.query.all()
-        data_json = [{"temperature": d.temperature, "humidity": d.humidity} for d in data]
-        return jsonify(data_json)
-    elif request.method == 'POST':
-        data = request.json
-        temperature = data.get('temperature')
-        humidity = data.get('humidity')
-        new_data = SensorData(temperature=temperature, humidity=humidity)
-        db.session.add(new_data)
-        db.session.commit()
-        return jsonify({"message": "Data received successfully"})
+                # 데이터베이스 레코드 수가 충분하면 LOF 모델 학습
+                num_records = SensorData.query.count()
+                if num_records >= 100:
+                    # 센서 데이터 가져오기
+                    sensor_data = SensorData.query.all()
+                    X = np.array([[entry.temperature, entry.humidity] for entry in sensor_data])
 
-# 차트 보기용 라우트 추가
-@app.route('/chart')
-def plot():
-    data = SensorData.query.all()
-    xdata = [d.temperature for d in data]
-    ydata = [d.humidity for d in data]
+                    # LOF 모델 학습
+                    lof_model = LocalOutlierFactor(n_neighbors=20, contamination=0.1)
+                    lof_model.fit(X)
 
-    # Plotly를 사용하여 그래프 생성
-    trace = go.Scatter(x=xdata, y=ydata, mode='markers', name='Data')
-    layout = go.Layout(title='Data Plot', xaxis=dict(title='Temperature'), yaxis=dict(title='Humidity'))
-    fig = go.Figure(data=[trace], layout=layout)
+                    # 저장된 모델을 pickle 또는 다른 방법으로 사용할 수도 있습니다.
 
-    # 그래프를 JSON 형태로 변환하여 반환
-    graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('chart.html', graphJSON=graphJSON)
+            connection.close()
+            time.sleep(3)  # 3초마다 데이터 업데이트
 
-#create_database()
-sensor_thread = threading.Thread(target=store_sensor_data)
-sensor_thread.daemon = True
-sensor_thread.start()
+        except mariadb.Error as e:
+            print(f"Error: {e}")
+            time.sleep(3)
 
+# 나머지 Flask 애플리케이션 코드와 함께 실행합니다.
 if __name__ == '__main__':
+    create_database()
+    sensor_thread = threading.Thread(target=store_sensor_data_and_train_lof_model)
+    sensor_thread.daemon = True
+    sensor_thread.start()
     app.run(debug=True)
